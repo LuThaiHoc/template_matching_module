@@ -77,14 +77,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='SIFT Template Matching with FLANN RANSAC')
     parser.add_argument('--avt_task_id', type=int, default=None,
                         help='Avt task id to process', required=True)
-    parser.add_argument('--connection_url', type=str, default=None,
-                        help='Connection url to database')
     parser.add_argument('--config_file', type=str, default=None,
                         help='Config file for database and ftp server config')
     
     
     args, unknown = parser.parse_known_args()
-    connection_url = args.connection_url
     avt_task_id = args.avt_task_id
     config_json_path = args.config_file
     
@@ -100,12 +97,8 @@ if __name__ == "__main__":
         
     print(f"Working with config file: {config_json_path}")
     
-    if connection_url is None: # if not input connection url, try to access database with config.json
-        print("Reading config.json file for database settings")
-        db_config = DatabaseConfig().read_from_json(config_json_path)
-        connection_url = Database.create_db_url(db_config.host, db_config.port, db_config.user, db_config.password, db_config.database)
-    
-    db = Database(connection_url)
+    db_config = DatabaseConfig().read_from_json(config_json_path)
+    db = Database(db_config.host, db_config.port, db_config.user, db_config.password, db_config.database)
     if not db.connected:
         # Let the WTM (Worker Task Manager) know that this module cannot connect to the database
         # (this case can happen when module and WTM run on difference machines)
@@ -123,7 +116,7 @@ if __name__ == "__main__":
     # Convert JSON string to dictionary
     if task.task_param is None:
         print("Input params not valid")
-        db.update_task(task_id=avt_task_id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
+        db.update_task(id=avt_task_id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
         sys.exit(EXIT_INVALID_MODULE_PARAMETERS)
     
     task_param_dict = json.loads(task.task_param)
