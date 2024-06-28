@@ -72,6 +72,25 @@ def create_output_json(result_image_file, cropped_image_file, rotated_bounding_b
 
     return json.dumps(output_dict, separators=(',', ':'))
 
+# Function to print running time
+import threading
+import time
+
+def update_running_time(task_id, db : Database, stop_event):
+    start_time = time.time()
+    while not stop_event.is_set():
+        elapsed_time = time.time() - start_time
+        # print(f"Running time {running_time}")
+        if elapsed_time > 1: # only update running time > 1 in task_stat to avoid confilict with tast_stat=1 (finished) or task_stat = 0 (error)
+            db.update_task(task_id, task_stat=round(elapsed_time, 1))
+            
+        # TODO: check processing resource and update task ETA here
+        
+        time.sleep(0.5)  # Update every second
+        
+        
+        
+    print(f"Running time thread for task {task_id} stopped.")
 
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description='SIFT Template Matching with FLANN RANSAC')
@@ -130,6 +149,13 @@ if __name__ == "__main__":
         db.update_task(task_id=avt_task_id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
         sys.exit(EXIT_INVALID_MODULE_PARAMETERS)
     
+    # update running time in thread
+    # just start thread here and skip some process above because it dont take times to excute
+    stop_event = threading.Event()
+    running_time_thread = threading.Thread(target=update_running_time, args=(avt_task_id, db, stop_event))
+    running_time_thread.daemon = True  # Set as daemon so it won't block program exit
+    running_time_thread.start()
+    
     ftp_config = FtpConfig().read_from_json(config_json_path)
     downloaded_main_image_file = ftp_download(ftp_server=ftp_config.host, ftp_port=ftp_config.port, username=ftp_config.user, password=ftp_config.password, file_path=main_image_file)
     downloaded_template_image_file = ftp_download(ftp_server=ftp_config.host, ftp_port=ftp_config.port, username=ftp_config.user, password=ftp_config.password, file_path=template_image_file)
@@ -159,8 +185,13 @@ if __name__ == "__main__":
         
     output_json_str = create_output_json(uploaded_result_image_path, uploaded_result_croped_path, bbox)
     
+    # stop update thread
+    stop_event.set()
+    running_time_thread.join()
+    
     # update finished result to database
     db.update_task(task_id=avt_task_id, task_stat=1, task_output=output_json_str, task_message=exit_code_messages[EXIT_FINISHED])
+    
     print("Process finished")
     sys.exit(EXIT_FINISHED)
     
