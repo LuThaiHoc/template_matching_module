@@ -107,4 +107,4 @@ This project is licensed under a private license. Unauthorized copying or distri
 
 # Authors
 - Thai Hoc - Dev
-- AVT project development team
+- SAT project development team
