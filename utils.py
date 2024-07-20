@@ -27,6 +27,7 @@ def pixel_to_latlon(tiff_path, x, y):
             
             # Ensure CRS is defined
             if crs is None:
+                print("Pixel to latlon: Not crs data")
                 return None, None
             
             # Convert pixel coordinates to geographic coordinates
@@ -40,7 +41,11 @@ def pixel_to_latlon(tiff_path, x, y):
             
             return lat, lon
 
-    except (RasterioError, ValueError, Exception):
+    except (RasterioError, ValueError) as e:
+        print(f"Pixel to latlon: Error reading TIFF file or processing coordinates: {e}")
+        return None, None
+    except Exception as e:
+        print(f"Pixel to latlon: An unexpected error occurred: {e}")
         return None, None
     
 def polygon_to_latlon(tiff_path, polygon):
