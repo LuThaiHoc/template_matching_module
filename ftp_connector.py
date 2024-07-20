@@ -76,8 +76,14 @@ def ftp_download(ftp_server, ftp_port, username, password, file_path, force_down
         filename = file_path.split('/')[-1]
         md5_file_path = file_path + ".md5"
 
+        # Define the base directory based on the operating system
+        if os.name == 'nt':  # Windows
+            base_dir = "C:\\temp"
+        else:  # Unix-like systems
+            base_dir = "/tmp"
+
         # Define the local path in the /tmp directory, creating corresponding directories
-        local_dir = os.path.join('/tmp', os.path.dirname(file_path).lstrip('/'))
+        local_dir = os.path.join(base_dir, os.path.dirname(file_path).lstrip('/'))
         os.makedirs(local_dir, exist_ok=True)
         local_path = os.path.join(local_dir, filename)
         local_md5_path = local_path + ".md5"
@@ -260,7 +266,10 @@ def get_server_checksum(ftp_server, ftp_port, username, password, file_path):
 if __name__ == "__main__":
     ftp_config =FtpConfig().read_from_json("./config.json")
     file_path = ftp_download(ftp_server=ftp_config.host, ftp_port=ftp_config.port, username=ftp_config.user, password=ftp_config.password,
-                             file_path="/data/tiff-data/quang_ninh_1m.tif", force_download=False)
+                             file_path="/data/quang_ninh_1m.tif", force_download=False)
+    
+    file_path = ftp_download(ftp_server=ftp_config.host, ftp_port=ftp_config.port, username=ftp_config.user, password=ftp_config.password,
+                             file_path="/data/ship.png", force_download=False)
     # file_path = ftp_upload(ftp_server=ftp_config.host, ftp_port=ftp_config.port, username=ftp_config.user, password=ftp_config.password, 
     #                        local_file_path="/tmp/output/22_result_image.png", remote_directory="/output/template_matching")
     

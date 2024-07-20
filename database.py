@@ -49,7 +49,7 @@ class AvtTask(Base):
     __tablename__ = 'avt_task'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    type = Column(Integer, nullable=False)
+    task_type = Column(Integer, nullable=False)
     creator = Column(VARCHAR, nullable=True)
     task_param = Column(Text, nullable=True)
     task_stat = Column(Integer, nullable=True)
@@ -103,7 +103,7 @@ class Database:
             new_task = AvtTask(
                 created_at=datetime.now(),
                 updated_at=datetime.now(),
-                type=task_type,
+                task_type=task_type,
                 creator=creator,
                 task_param=param_json,
                 task_stat=task_stat,

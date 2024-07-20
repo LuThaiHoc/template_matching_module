@@ -6,6 +6,8 @@ import argparse
 import json
 import sys
 from exit_code import *
+from utils import polygon_to_latlon
+
 
 FTP_SERVER_OUTPUT_DIR = "/output/template_matching"
 
@@ -20,7 +22,10 @@ def save_and_upload_images(result_image, cropped_result, avt_task_id, ftp_config
     :param remote_dir: Upload dir in FTP server
     """
     # Ensure the output directory exists
-    output_dir = "/tmp/output/"
+    if os.name == 'nt':  # Check if the OS is Windows
+        output_dir = "C:\\temp\\output\\"
+    else:
+        output_dir = "/tmp/output/"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -45,30 +50,20 @@ def save_and_upload_images(result_image, cropped_result, avt_task_id, ftp_config
     
     return uploaded_result_image_path, uploaded_result_croped_path
 
-def create_output_json(result_image_file, cropped_image_file, rotated_bounding_box):
+def create_output_json(result_image_file, cropped_image_file, bbox):
     """
     Create a JSON string with the specified format.
 
     :param result_image_file: Path to the result image in the FTP server.
     :param cropped_image_file: Path to the cropped image in the FTP server.
-    :param rotated_bounding_box: Bounding box value as tuple (min_x, min_y, max_x, max_y) or None.
+    :param bbox: List of points (latitude, longitude) of the bounding box or None.
     :return: JSON string.
     """
     output_dict = {
         "result_image_file": result_image_file if result_image_file is not None else "",
         "cropped_image_file": cropped_image_file if cropped_image_file is not None else "",
-        "rotated_bounding_box": {}
+        "location": bbox if bbox is not None else []
     }
-
-    if rotated_bounding_box is not None:
-        # Convert bounding box values to native Python integers (int)
-        min_x, min_y, max_x, max_y = map(int, rotated_bounding_box)
-        output_dict["rotated_bounding_box"] = {
-            "min_x": min_x,
-            "min_y": min_y,
-            "max_x": max_x,
-            "max_y": max_y
-        }
 
     return json.dumps(output_dict, separators=(',', ':'))
 
@@ -166,7 +161,8 @@ if __name__ == "__main__":
         sys.exit(EXIT_FTP_DOWNLOAD_ERROR)
     
     print("Processing data...")
-    result_image, crop, bbox = sift_flann_ransac_matching(downloaded_main_image_file, downloaded_template_image_file)
+    result_image, crop, polygon = sift_flann_ransac_matching(downloaded_main_image_file, downloaded_template_image_file)
+    lat_long_bbox = polygon_to_latlon(downloaded_main_image_file, polygon)
 
     # if crop is not None:
     #     cv2.imshow("Crop image", crop)
@@ -183,7 +179,7 @@ if __name__ == "__main__":
         db.update_task(task_id=avt_task_id, task_stat=0, task_message=exit_code_messages[EXIT_FTP_UPLOAD_ERROR])
         sys.exit(EXIT_FTP_UPLOAD_ERROR)
         
-    output_json_str = create_output_json(uploaded_result_image_path, uploaded_result_croped_path, bbox)
+    output_json_str = create_output_json(uploaded_result_image_path, uploaded_result_croped_path, lat_long_bbox)
     
     # stop update thread
     stop_event.set()
