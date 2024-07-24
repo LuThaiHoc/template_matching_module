@@ -9,4 +9,4 @@ cd "$SCRIPT_DIR"
 . .env/bin/activate
 
 # Run the Python script with all passed arguments
-python main.py "$@"
+exec python main.py "$@"
