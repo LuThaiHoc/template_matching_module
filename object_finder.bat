@@ -12,3 +12,6 @@ call .\env\Scripts\activate
 
 :: Run the Python script with all passed arguments
 python main.py %*
+
+:: Exit with the same exit code as the Python script
+exit /b %ERRORLEVEL%
