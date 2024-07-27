@@ -68,6 +68,19 @@ def create_output_json(result_image_file, cropped_image_file, bbox):
 
     return json.dumps(output_dict, separators=(',', ':'))
 
+def create_output_location_json(bbox):
+    """
+    Create a JSON string with the specified format.
+
+    :param bbox: List of points (latitude, longitude) of the bounding box or None.
+    :return: JSON string.
+    """
+    output_dict = {
+        "location": bbox if bbox is not None else []
+    }
+
+    return json.dumps(output_dict, separators=(',', ':'))
+
 # Function to print running time
 import threading
 import time
@@ -118,6 +131,13 @@ if __name__ == "__main__":
         sys.exit(EXIT_CANNOT_CONNECT_TO_DATABASE)
     else:
         print("Succeed connect to the database!")
+    
+    # update running time in thread
+    # just start thread here and skip some process above because it dont take times to excute
+    stop_event = threading.Event()
+    running_time_thread = threading.Thread(target=update_running_time, args=(avt_task_id, db, stop_event))
+    running_time_thread.daemon = True  # Set as daemon so it won't block program exit
+    running_time_thread.start()
         
     task = None
     if avt_task_id is None:
@@ -131,14 +151,16 @@ if __name__ == "__main__":
         sys.exit(EXIT_INVALID_INPUT_AVT_TASK_ID)
     else:
         avt_task_id = task.id
+
         
     # Convert JSON string to dictionary
     if task.task_param is None:
-        print("Input params not valid")
+        print("Input params not valid - No data")
         db.update_task(id=avt_task_id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
         sys.exit(EXIT_INVALID_MODULE_PARAMETERS)
-    
+
     task_param_dict = json.loads(task.task_param)
+    
 
     # Access the data as a dictionary
     main_image_file = task_param_dict.get("main_image_file", "")
@@ -148,13 +170,6 @@ if __name__ == "__main__":
         print("Input params not valid")
         db.update_task(task_id=avt_task_id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
         sys.exit(EXIT_INVALID_MODULE_PARAMETERS)
-    
-    # update running time in thread
-    # just start thread here and skip some process above because it dont take times to excute
-    stop_event = threading.Event()
-    running_time_thread = threading.Thread(target=update_running_time, args=(avt_task_id, db, stop_event))
-    running_time_thread.daemon = True  # Set as daemon so it won't block program exit
-    running_time_thread.start()
     
     ftp_config = FtpConfig().read_from_json(config_json_path)
     downloaded_main_image_file = ftp_download(ftp_server=ftp_config.host, ftp_port=ftp_config.port, username=ftp_config.user, password=ftp_config.password, file_path=main_image_file)
@@ -177,14 +192,16 @@ if __name__ == "__main__":
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
    
-    # update result to ftp server and update output to database
-    uploaded_result_image_path, uploaded_result_croped_path = save_and_upload_images(result_image, crop, avt_task_id, ftp_config, FTP_SERVER_OUTPUT_DIR)
-    if uploaded_result_image_path is None:
-        print("Error upload file to FTP server")
-        db.update_task(task_id=avt_task_id, task_stat=0, task_message=exit_code_messages[EXIT_FTP_UPLOAD_ERROR])
-        sys.exit(EXIT_FTP_UPLOAD_ERROR)
+    # # update result to ftp server and update output to database
+    # uploaded_result_image_path, uploaded_result_croped_path = save_and_upload_images(result_image, crop, avt_task_id, ftp_config, FTP_SERVER_OUTPUT_DIR)
+    # if uploaded_result_image_path is None:
+    #     print("Error upload file to FTP server")
+    #     db.update_task(task_id=avt_task_id, task_stat=0, task_message=exit_code_messages[EXIT_FTP_UPLOAD_ERROR])
+    #     sys.exit(EXIT_FTP_UPLOAD_ERROR)
         
-    output_json_str = create_output_json(uploaded_result_image_path, uploaded_result_croped_path, lat_long_bbox)
+    # output_json_str = create_output_json(uploaded_result_image_path, uploaded_result_croped_path, lat_long_bbox)
+    
+    output_json_str = create_output_location_json(lat_long_bbox)
     
     # stop update thread
     stop_event.set()
