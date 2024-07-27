@@ -10,6 +10,7 @@ from utils import polygon_to_latlon
 
 
 FTP_SERVER_OUTPUT_DIR = "/output/template_matching"
+MODULE_SERVE_TASK_TYPE = 7 # the type of task that module is going to serve
 
 def save_and_upload_images(result_image, cropped_result, avt_task_id, ftp_config: FtpConfig, remote_dir):
     """
@@ -74,27 +75,23 @@ import time
 def update_running_time(task_id, db : Database, stop_event):
     start_time = time.time()
     while not stop_event.is_set():
-        elapsed_time = time.time() - start_time
+        elapsed_time = time.time() - start_time 
         # print(f"Running time {running_time}")
         if elapsed_time > 1: # only update running time > 1 in task_stat to avoid confilict with tast_stat=1 (finished) or task_stat = 0 (error)
             db.update_task(task_id, task_stat=round(elapsed_time, 1))
-            
         # TODO: check processing resource and update task ETA here
         
         time.sleep(0.5)  # Update every second
-        
-        
         
     print(f"Running time thread for task {task_id} stopped.")
 
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description='SIFT Template Matching with FLANN RANSAC')
     parser.add_argument('--avt_task_id', type=int, default=None,
-                        help='Avt task id to process', required=True)
+                        help='Avt task id to process')
     parser.add_argument('--config_file', type=str, default=None,
                         help='Config file for database and ftp server config')
-    
-    
+
     args, unknown = parser.parse_known_args()
     avt_task_id = args.avt_task_id
     config_json_path = args.config_file
@@ -121,12 +118,20 @@ if __name__ == "__main__":
         sys.exit(EXIT_CANNOT_CONNECT_TO_DATABASE)
     else:
         print("Succeed connect to the database!")
+        
+    task = None
+    if avt_task_id is None:
+        # try to get task by module type
+        task = db.get_waiting_task_by_type(MODULE_SERVE_TASK_TYPE)
+    else:
+        task = db.get_task_by_id(avt_task_id)
     
-    task = db.get_task_by_id(avt_task_id)
     if task is None:
         print("Cannot get task by ID")
         sys.exit(EXIT_INVALID_INPUT_AVT_TASK_ID)
-    
+    else:
+        avt_task_id = task.id
+        
     # Convert JSON string to dictionary
     if task.task_param is None:
         print("Input params not valid")

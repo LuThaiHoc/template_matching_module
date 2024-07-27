@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine, Column, Integer, Text, Float, Boolean, exc, text, DateTime, VARCHAR
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy import and_, func
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
 import json, os
@@ -147,6 +148,36 @@ class Database:
         
         return success
 
+    def get_waiting_task_by_type(self, task_type):
+        session = self.Session()
+        try:
+            # Query to get tasks with task_stat < 0 and the specific task_type
+            tasks_query = session.query(AvtTask).filter(
+                and_(
+                    AvtTask.task_stat < 0,
+                    AvtTask.task_type == task_type
+                )
+            ).order_by(
+                # Order by task_stat (closer to -1 is better)
+                func.abs(AvtTask.task_stat - (-1)),
+                # Then order by latest created_at
+                AvtTask.created_at.desc()
+            )
+
+            # Fetch the first result
+            task = tasks_query.first()
+
+            if not task:
+                print(f"No tasks found for type {task_type} with task_stat < 0.")
+                return None
+
+            return task
+        except SQLAlchemyError as e:
+            print(f"Error retrieving task: {e}")
+            return None
+        finally:
+            session.close()
+
     def get_task_by_id(self, task_id):
         session = self.Session()
         try:
@@ -263,5 +294,10 @@ if __name__ == "__main__":
     db_config = DatabaseConfig().read_from_json("config.json")
     print(db_config.host, db_config.port)
     db = Database(db_config.host, db_config.port, db_config.user, db_config.password, db_config.database)
+    task = db.get_waiting_task_by_type(1)
+    if task is not None:
+        print("Task: ", task.id)
+    else:
+        print("No waiting task to serve!")
+    # db.update_task(5, creator="ThaiHocUpdated")
     
-    db.update_task(5, creator="ThaiHocUpdated")
