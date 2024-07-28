@@ -90,8 +90,10 @@ def update_running_time(task_id, db : Database, stop_event):
     while not stop_event.is_set():
         elapsed_time = time.time() - start_time 
         # print(f"Running time {running_time}")
-        if elapsed_time > 1: # only update running time > 1 in task_stat to avoid confilict with tast_stat=1 (finished) or task_stat = 0 (error)
+        if elapsed_time > 2: # only update running time > 2 in task_stat to avoid confilict with tast_stat=1 (finished) or task_stat = 0 (error)
             db.update_task(task_id, task_stat=round(elapsed_time, 1))
+        else:
+            db.update_task(task_id, task_stat=round(elapsed_time, 2))
         # TODO: check processing resource and update task ETA here
         
         time.sleep(0.5)  # Update every second
