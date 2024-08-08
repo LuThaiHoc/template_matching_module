@@ -8,3 +8,4 @@ dist/
 main.spec
 imgs/
 *.json
+output_ship_detect/
