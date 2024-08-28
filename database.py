@@ -62,6 +62,7 @@ class AvtTask(Base):
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=True)
     user_id = Column(Integer, nullable=True)
+    task_id_ref = Column(Integer, nullable=True)
 
 class TaskConfig(Base):
     __tablename__ = 'avt_task_config'
@@ -95,7 +96,7 @@ class Database:
     def create_db_url(host, port, user, password, db_name):
         return f'postgresql://{user}:{password}@{host}:{port}/{db_name}'
 
-    def add_task(self, task_type, creator, task_param=None, task_stat=None, worker_ip=None, process_id=None, task_eta=None, task_output=None, task_message=None, user_id=None):
+    def add_task(self, task_type, creator, task_param=None, task_stat=None, worker_ip=None, process_id=None, task_eta=None, task_output=None, task_message=None, user_id=None, task_id_ref=None):
         session = self.Session()
         
         try:
@@ -113,7 +114,8 @@ class Database:
                 task_eta=task_eta,
                 task_output=task_output,
                 task_message=task_message,
-                user_id=user_id
+                user_id=user_id,
+                task_id_ref=task_id_ref
             )
             session.add(new_task)
             session.commit()
@@ -148,7 +150,7 @@ class Database:
         
         return success
 
-    def get_waiting_task_by_type(self, task_type):
+    def get_first_waiting_task_by_type(self, task_type):
         session = self.Session()
         try:
             # Query to get tasks with task_stat < 0 and the specific task_type
@@ -292,12 +294,13 @@ class Database:
 if __name__ == "__main__":
 
     db_config = DatabaseConfig().read_from_json("config.json")
-    print(db_config.host, db_config.port)
+    # print(db_config.host, db_config.port)
     db = Database(db_config.host, db_config.port, db_config.user, db_config.password, db_config.database)
-    task = db.get_waiting_task_by_type(1)
+    task = db.get_first_waiting_task_by_type(7)
     if task is not None:
-        print("Task: ", task.id)
+        print("Task: ", task.id, task.task_id_ref)
     else:
         print("No waiting task to serve!")
     # db.update_task(5, creator="ThaiHocUpdated")
+
     
