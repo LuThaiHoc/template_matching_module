@@ -1,8 +1,6 @@
 import cv2
 import numpy as np
-from utils import polygon_to_latlon
-
-def sift_flann_ransac_matching(main_image_path, template_image_path, lowes_ratio=0.75, min_match_count=5,
+def sift_flann_ransac_matching(main_image_path, template_image_path, lowes_ratio=0.75, min_match_count=4,
                                flann_index_algorithm=1, flann_trees=5, flann_search_checks=50):
     """
     Perform SIFT feature matching with FLANN and RANSAC.
@@ -125,7 +123,6 @@ if __name__ == "__main__":
             t = time.time()
             try:
                 result_image, cropped_result, polygon = sift_flann_ransac_matching(main_image_path, template_image_path)
-                # bbox = polygon_to_latlon(main_image_path, polygon)
                 if polygon is not None:
                     with open('result.txt', 'a') as f:
                         f.write(main_image_path + '\n')

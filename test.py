@@ -6,7 +6,6 @@ import argparse
 import json
 import sys
 from exit_code import *
-from utils import polygon_to_latlon
 import string
 
 import json
@@ -78,7 +77,7 @@ def list_all_files(directory):
 
 
 SHIP_DETECT_OUTPUT_DIR = "/data/RASTER_PREPR/output_ship_detect/"
-DOWNLAD_SHIP_DETECT_OUTPUT_DIR = "output_ship_detect/"
+DOWNLAD_SHIP_DETECT_OUTPUT_DIR = "output_ship_detect/quang_ninh_1m"
 # ftp_config = FtpConfig().read_from_json('config.json')
 # downloaded_founded_image_and_labels = ftp_download_all_files(ftp_server=ftp_config.host,
 #                                                                     ftp_port=ftp_config.port,
@@ -90,20 +89,28 @@ DOWNLAD_SHIP_DETECT_OUTPUT_DIR = "output_ship_detect/"
 #                                                                 )
 
 downloaded_founded_image_and_labels = list_all_files(DOWNLAD_SHIP_DETECT_OUTPUT_DIR)
-downloaded_template_image_file = 'imgs/01.png'
+# downloaded_template_image_file = '/tmp/data/TEMPLATE/07_resized.png'
+downloaded_template_image_file = '/media/hoc/WORK/remote/AnhPhuong/SAT/Project/SAT_Modules/data/template_matching/template/h7_camera.png'
+
 
 results = []
 for item in downloaded_founded_image_and_labels:
     if item.endswith(".png"):
-        print("Checking ship: ", item)
+        # print("Checking ship: ", item)
         result_image, crop, polygon = sift_flann_ransac_matching(item, downloaded_template_image_file)
         if polygon is None: 
             continue
+        
+        print("Found: ", item)
+        cv2.imshow("Matching result", result_image)
+        cv2.waitKey(50)
         if is_convex_polygon(polygon):
-            print("Found: ", item)
-            cv2.imshow("Got match", result_image)
-            cv2.waitKey(0)
+            print("Polygon convex: ", item)
+            # cv2.imshow("Got match", result_image)
+            # cv2.waitKey(0)
             results.append(item)
+        else:
+            print("Polygon not convex")
 
 
 # # List of PNG paths
@@ -112,11 +119,15 @@ for item in downloaded_founded_image_and_labels:
 #     'output_ship_detect/tay_ho_1m/002.png'
 # ]
 
+print(results)
+
 # Create JSON structure
 json_data = create_json_from_paths(results)
 
 # Output JSON data
-print(json.dumps(json_data).replace(DOWNLAD_SHIP_DETECT_OUTPUT_DIR, SHIP_DETECT_OUTPUT_DIR))
+# print(json.dumps(json_data).replace(DOWNLAD_SHIP_DETECT_OUTPUT_DIR, SHIP_DETECT_OUTPUT_DIR))
 
 # for item in results:
 #     item.replace(DOWNLAD_SHIP_DETECT_OUTPUT_DIR, SHIP_DETECT_OUTPUT_DIR)
+
+

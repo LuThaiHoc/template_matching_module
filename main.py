@@ -6,14 +6,27 @@ import argparse
 import json
 import sys
 from exit_code import *
-from utils import polygon_to_latlon, logger
-import string, time
+from utils import logger
+import time, glob
 
 FTP_SERVER_OUTPUT_DIR = "/output/template_matching"
 MODULE_SERVE_TASK_TYPE = 7 # the type of task that module is going to serve
-SHIP_DETECT_OUTPUT_DIR = "/data/RASTER_PREPR/output_ship_detect/"
+# SHIP_DETECT_OUTPUT_DIR = "/data/RASTER_PREPR/output_ship_detect/"
+SHIP_DETECT_OUTPUT_DIR = "/data/DETECTOR_OUTPUT/"
 DOWNLAD_SHIP_DETECT_OUTPUT_DIR = "output_ship_detect/"
 CHECK_WAITING_TASK_INTERVAL = 5 # check for waiting task every 5s
+
+def delete_all_files_in_dir(directory):
+    # Use glob to get all files in the directory
+    files = glob.glob(os.path.join(directory, '*'))
+
+    for file in files:
+        try:
+            if os.path.isfile(file):
+                os.remove(file)  # Delete the file
+                print(f"File '{file}' removed successfully")
+        except OSError as e:
+            print(f"Error: {e.strerror} - {file}")
 
 
 def save_and_upload_images(result_image, cropped_result, avt_task_id, ftp_config: FtpConfig, remote_dir):
@@ -145,9 +158,10 @@ def update_running_time(task_id, db : Database, stop_event):
         elapsed_time = time.time() - start_time 
         # logger.debug(f"Running time {running_time}")
         if elapsed_time > 2: # only update running time > 2 in task_stat to avoid confilict with tast_stat=1 (finished) or task_stat = 0 (error)
-            db.update_task(task_id, task_stat=round(elapsed_time, 1))
+            db.update_task(task_id, task_stat=round(elapsed_time, 0))
+            logger.debug(f"Update running time to {round(elapsed_time, 0)}")
         else:
-            db.update_task(task_id, task_stat=round(elapsed_time, 2))
+            db.update_task(task_id, task_stat=2)
         # TODO: check processing resource and update task ETA here
         
         time.sleep(0.5)  # Update every second
@@ -256,6 +270,7 @@ if __name__ == "__main__":
         
         ftp_config = FtpConfig().read_from_json(config_json_path)
         downloaded_template_image_file = ftp_download(ftp_server=ftp_config.host, ftp_port=ftp_config.port, username=ftp_config.user, password=ftp_config.password, file_path=template_image_file)
+        logger.debug(f"Template image file downloaded at: {downloaded_template_image_file}")
         
         if downloaded_template_image_file is None:
             logger.error("Cannot download file from ftp server!")
@@ -266,12 +281,16 @@ if __name__ == "__main__":
         
         for output_ship_detect_dir, main_file in output_ship_detect_of_main_image_files:
             logger.debug(f"Downloading all output ship detect in {output_ship_detect_dir}")
+            download_local_dir = os.path.join(DOWNLAD_SHIP_DETECT_OUTPUT_DIR,  os.path.basename(os.path.normpath(output_ship_detect_dir)))
+            
+            delete_all_files_in_dir(download_local_dir)
+            
             downloaded_founded_image_and_labels = ftp_download_all_files(ftp_server=ftp_config.host,
                                                                             ftp_port=ftp_config.port,
                                                                             username=ftp_config.user,
                                                                             password=ftp_config.password,
                                                                             remote_dir=output_ship_detect_dir,
-                                                                            local_dir=DOWNLAD_SHIP_DETECT_OUTPUT_DIR,
+                                                                            local_dir=download_local_dir,
                                                                             force_download=True
                                                                         )
             if len(downloaded_founded_image_and_labels) == 0:
@@ -283,17 +302,21 @@ if __name__ == "__main__":
                     result_image, crop, polygon = sift_flann_ransac_matching(item, downloaded_template_image_file)
                     if polygon is None: 
                         continue
+                    
+                    # if True:
                     if is_convex_polygon(polygon):
-                        # logger.debug("Found: ", item)
+                        logger.debug(f"Found match: {item}")
                         # cv2.imshow("Got match", result_image)
                         # cv2.waitKey(0)
-                        results.append((item,main_file))
+                        results.append((item, main_file))
 
                 
         logger.debug(f"Got list matching ship: {results}")
         json_data = create_json_from_paths(results)
         json_output_str = json.dumps(json_data).replace(DOWNLAD_SHIP_DETECT_OUTPUT_DIR, SHIP_DETECT_OUTPUT_DIR)
         json_output_str.replace("\\","/")
+        
+        logger.debug(f"Return result json: {json_output_str}")
         
         # stop update thread
         stop_event.set()

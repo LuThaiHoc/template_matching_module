@@ -170,7 +170,7 @@ class Database:
             task = tasks_query.first()
 
             if not task:
-                print(f"No tasks found for type {task_type} with task_stat < 0.")
+                # print(f"No tasks found for type {task_type} with task_stat < 0.")
                 return None
 
             return task
