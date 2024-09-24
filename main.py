@@ -246,7 +246,16 @@ if __name__ == "__main__":
 
         # Access the data as a dictionary
         # main_image_file = task_param_dict.get("main_image_file", "")
-        template_image_file = task_param_dict.get("template_image_file", "")
+        template_image_file_list = task_param_dict.get("template_image_file", [])
+        if len(template_image_file_list) == 0:
+            logger.debug(f"Input params of task {task.id} is not valid - No main template file")
+            stop_event.set()
+            running_time_thread.join()
+            db.update_task(id=task.id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
+            continue
+            
+        # template_image_file = task_param_dict.get("template_image_file", "")
+        template_image_file = template_image_file_list[0]
         main_image_files = task_param_dict.get("main_image_files", [])
         
         if template_image_file == "":
