@@ -5,13 +5,15 @@ import os, json, hashlib
 import os
 from ftplib import FTP, error_perm
 from tqdm import tqdm
+from utils import logger
 
 class FtpConfig():
-    def __init__(self,host="localhost", port=2, user="user", password="password"):
+    def __init__(self,host="localhost", port=2, user="user", password="password", find_dirs=[]):
         self.host = host
         self.port = port
         self.user = user
         self.password = password
+        self.find_dirs = find_dirs
         
     def save_to_json(self, file_path='config.json'):
         if not os.path.exists(file_path):
@@ -25,16 +27,17 @@ class FtpConfig():
             'port': self.port,
             'user': self.user,
             'password': self.password,
+            'find_dirs' : self.find_dirs,
         }
         
         with open(file_path, 'w') as json_file:
             json.dump(settings, json_file, indent=4)
-        print(f"Database settings saved to {file_path}")
+        logger.debug(f"Database settings saved to {file_path}")
 
     @classmethod
     def read_from_json(cls, file_path='config.json'):
         if not os.path.exists(file_path):
-            print(f"File {file_path} not found. Returning default settings.")
+            logger.debug(f"File {file_path} not found. Returning default settings.")
             return cls()
         
         with open(file_path, 'r') as json_file:
@@ -105,7 +108,7 @@ def ftp_download(ftp_server, ftp_port, username, password, file_path, force_down
             
             # Check if the MD5 file is empty
             if os.path.getsize(local_md5_path) == 0:
-                print(f"MD5 file '{md5_file_path}' is empty. Proceeding to download the actual file.")
+                logger.debug(f"MD5 file '{md5_file_path}' is empty. Proceeding to download the actual file.")
                 force_download = True
             else:
                 # Read the checksum from the .md5 file
@@ -116,13 +119,13 @@ def ftp_download(ftp_server, ftp_port, username, password, file_path, force_down
                 if os.path.exists(local_path):
                     local_md5_checksum = calculate_md5(local_path)
                     if local_md5_checksum == server_md5_checksum and not force_download:
-                        print(f"File '{filename}' already exists with matching checksum at '{local_path}'.")
+                        logger.debug(f"File '{filename}' already exists with matching checksum at '{local_path}'.")
                         # Remove the local MD5 file if it exists
                         if os.path.exists(local_md5_path):
                             os.remove(local_md5_path)
                         return local_path
         else:
-            print(f"MD5 file '{md5_file_path}' does not exist. Proceeding to download the actual file.")
+            logger.debug(f"MD5 file '{md5_file_path}' does not exist. Proceeding to download the actual file.")
             force_download = True
 
         # Get the size of the file
@@ -143,7 +146,7 @@ def ftp_download(ftp_server, ftp_port, username, password, file_path, force_down
             # Use RETR command to download the file
             ftp.retrbinary(cmd=f'RETR {file_path}', callback=callback)
 
-        print(f"File '{filename}' downloaded successfully to '{local_path}'.")
+        logger.debug(f"File '{filename}' downloaded successfully to '{local_path}'.")
         # Remove the local MD5 file if it exists
         if os.path.exists(local_md5_path):
             os.remove(local_md5_path)
@@ -152,7 +155,7 @@ def ftp_download(ftp_server, ftp_port, username, password, file_path, force_down
         return local_path
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logger.debug(f"An error occurred: {e}")
         return None
 
     finally:
@@ -202,13 +205,13 @@ def ftp_upload(ftp_server, ftp_port, username, password, local_file_path, remote
             # Use STOR command to upload the file
             ftp.storbinary(cmd=f'STOR {filename}', fp=local_file, callback=callback)
 
-        print(f"File '{filename}' uploaded successfully.")
+        logger.debug(f"File '{filename}' uploaded successfully.")
 
         # Return the file path in the FTP server
         return os.path.join(remote_directory, filename)
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logger.debug(f"An error occurred: {e}")
         return None
 
     finally:
@@ -235,7 +238,7 @@ def get_server_checksum(ftp_server, ftp_port, username, password, file_path):
 
         # Check for supported features
         features = ftp.sendcmd("FEAT")
-        print(features)
+        logger.debug(features)
         checksum_command = None
 
         if "XMD5" in features:
@@ -246,19 +249,19 @@ def get_server_checksum(ftp_server, ftp_port, username, password, file_path):
             checksum_command = "XSHA256"
 
         if not checksum_command:
-            print("No checksum command supported by the FTP server.")
+            logger.debug("No checksum command supported by the FTP server.")
             return None
 
         # Get the checksum
         response = ftp.sendcmd(f"{checksum_command} {file_path}")
         checksum = response.split()[-1]
         
-        print(f"{checksum_command} checksum of '{file_path}' is {checksum}")
+        logger.debug(f"{checksum_command} checksum of '{file_path}' is {checksum}")
 
         return checksum
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logger.debug(f"An error occurred: {e}")
         return None
 
     finally:
@@ -278,7 +281,7 @@ def ftp_download_file(ftp, remote_file_path, local_file_path, force_download):
     :return: Local file path if download is successful, otherwise None.
     """
     if os.path.exists(local_file_path) and not force_download:
-        print(f"File '{local_file_path}' already exists. Skipping download.")
+        logger.debug(f"File '{local_file_path}' already exists. Skipping download.")
         return local_file_path
     
     try:
@@ -292,11 +295,11 @@ def ftp_download_file(ftp, remote_file_path, local_file_path, force_download):
             
             ftp.retrbinary(f'RETR {remote_file_path}', callback)
         
-        print(f"File '{local_file_path}' downloaded successfully.")
+        logger.debug(f"File '{local_file_path}' downloaded successfully.")
         return local_file_path
 
     except Exception as e:
-        print(f"An error occurred while downloading '{remote_file_path}': {e}")
+        logger.debug(f"An error occurred while downloading '{remote_file_path}': {e}")
         return None
 
 def ftp_download_all_files_to_one_dir(ftp_server, ftp_port, username, password, remote_dir, local_dir, force_download=False):
@@ -349,7 +352,7 @@ def ftp_download_all_files_to_one_dir(ftp_server, ftp_port, username, password, 
             except error_perm as e:
                 # If changing to directory fails, it's a file
                 if str(e).startswith('550'):
-                    print(f"Downloading file: {item}")
+                    logger.debug(f"Downloading file: {item}")
                     downloaded_file = ftp_download_file(ftp, f"{remote_dir}/{item}", local_item_path, force_download)
                     if downloaded_file:
                         downloaded_files.append(downloaded_file)
@@ -357,7 +360,7 @@ def ftp_download_all_files_to_one_dir(ftp_server, ftp_port, username, password, 
                     raise
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logger.debug(f"An error occurred: {e}")
 
     finally:
         # Close the FTP connection
@@ -366,7 +369,7 @@ def ftp_download_all_files_to_one_dir(ftp_server, ftp_port, username, password, 
 
     return downloaded_files
 
-def ftp_download_all_files(ftp_server, ftp_port, username, password, remote_dir, local_dir, force_download=False):
+def ftp_download_all_files(ftp_server, ftp_port, username, password, remote_dir, local_dir, force_download=False, filter_detection=True):
     """
     Download all files from a remote directory and its subdirectories to corresponding local directories.
 
@@ -380,6 +383,8 @@ def ftp_download_all_files(ftp_server, ftp_port, username, password, remote_dir,
     :return: List of downloaded file paths.
     """
     downloaded_files = []
+    
+    first_attempt = True
 
     def download_file(ftp, remote_file_path, local_file_path):
         """
@@ -395,6 +400,9 @@ def ftp_download_all_files(ftp_server, ftp_port, username, password, remote_dir,
         """
         ftp.cwd(remote_dir)
         items = ftp.nlst()
+        
+        first_attempt = True
+        local_force_download = force_download
 
         for item in items:
             remote_path = f"{remote_dir}/{item}"
@@ -412,10 +420,40 @@ def ftp_download_all_files(ftp_server, ftp_port, username, password, remote_dir,
             except error_perm as e:
                 # If changing to directory fails, it's a file
                 if str(e).startswith('550'):
-                    print(f"Downloading file: {remote_path}")
-                    downloaded_file = download_file(ftp, remote_path, local_path)
-                    if downloaded_file:
-                        downloaded_files.append(downloaded_file)
+                    # List of supported file extensions
+                    supported_extensions = ('.png', '.jpg', '.jpeg', '.txt')
+
+                    if filter_detection:  # only download png, jpg, jpeg, and txt files
+                        if not remote_path.lower().endswith(supported_extensions):
+                            logger.debug(f'Ignore unsupported file: {remote_path}')
+                            continue
+                                            
+                    if not os.path.exists(local_path) or local_force_download:
+                        logger.debug(f"Downloading file: {remote_path}")
+                        downloaded_file = download_file(ftp, remote_path, local_path)
+                        if downloaded_file:
+                            downloaded_files.append(downloaded_file)
+                    else:
+                        # silly checking: get only one sample file, check if downloaded file and current local file are identical, 
+                        # force download others if not
+                        if first_attempt:
+                            import filecmp
+                            downloaded_file = download_file(ftp, remote_path, local_path+'.check')
+                            if downloaded_file:
+                                if not filecmp.cmp(local_path, downloaded_file):
+                                    logger.debug(f"File {remote_path} and {local_path} are not identical, force download all others file!")
+                                    local_force_download = True
+                                    import shutil
+                                    shutil.copyfile(downloaded_file, local_path)
+                                else:
+                                    logger.debug(f"Checked that {remote_path} and {local_path} are identical, use local file as cached!")
+                                    logger.debug(f"Using cached: {local_path}")
+                                    downloaded_files.append(local_path)
+                                    # if two file is identical, not download others
+                            first_attempt = False
+                        else:     
+                            logger.debug(f"Using cached: {local_path}")
+                            downloaded_files.append(local_path)
                 else:
                     raise
 
@@ -432,7 +470,7 @@ def ftp_download_all_files(ftp_server, ftp_port, username, password, remote_dir,
         process_directory(ftp, remote_dir, local_dir)
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logger.debug(f"An error occurred: {e}")
 
     finally:
         # Close the FTP connection
@@ -440,6 +478,58 @@ def ftp_download_all_files(ftp_server, ftp_port, username, password, remote_dir,
             ftp.quit()
 
     return downloaded_files
+
+def ftp_get_all_child_dirs(ftp_server, ftp_port, username, password, remote_dir):
+    """
+    Get a list of all child directories (including subdirectories) of a given remote directory on an FTP server.
+
+    :param ftp_server: Address of the FTP server.
+    :param ftp_port: Port number of the FTP server.
+    :param username: Username for authentication.
+    :param password: Password for authentication.
+    :param remote_dir: Path to the directory on the FTP server.
+    :return: List of all child directories (full paths) under the remote directory.
+    """
+    all_dirs = []
+
+    try:
+        # Connect to the FTP server
+        ftp = FTP()
+        ftp.connect(host=ftp_server, port=ftp_port)
+        ftp.login(user=username, passwd=password)
+
+        # Function to recursively list directories
+        def list_dirs(dir_path):
+            try:
+                ftp.cwd(dir_path)
+                all_dirs.append(dir_path)
+                items = ftp.nlst()
+
+                for item in items:
+                    try:
+                        ftp.cwd(f"{dir_path}/{item}")  # Check if it's a directory
+                        list_dirs(f"{dir_path}/{item}")  # Recurse into the directory
+                        ftp.cwd('..')  # Go back to the parent directory
+                    except error_perm:
+                        # If it fails to change directory, it's a file, so ignore it
+                        continue
+            except Exception as e:
+                logger.debug(f"An error occurred: {e}")
+                return
+
+        # Start recursion from the remote directory
+        list_dirs(remote_dir)
+
+    except Exception as e:
+        logger.debug(f"An error occurred while connecting to the FTP server: {e}")
+        return []
+
+    finally:
+        # Close the FTP connection
+        if ftp:
+            ftp.quit()
+
+    return all_dirs
 
 if __name__ == "__main__":
     # ftp_config =FtpConfig().read_from_json("./config.json")
@@ -454,22 +544,24 @@ if __name__ == "__main__":
     #                        local_file_path="/tmp/output/22_result_image.png", remote_directory="/output/template_matching")
     
     # if file_path is not None:
-    #     print(file_path)
+    #     logger.debug(file_path)
 
     ftp_config = FtpConfig().read_from_json("./config.json")
+    
+    logger.debug(ftp_config.find_dirs)
     remote_directory = "/data/RASTER_PREPR/output_ship_detect"
     local_directory = "output_ship_detect/"
+    remote_directory = '/data/documents/objects'
     
-    result = ftp_download_all_files(
+    result = ftp_get_all_child_dirs(
         ftp_server=ftp_config.host,
         ftp_port=ftp_config.port,
         username=ftp_config.user,
         password=ftp_config.password,
-        remote_dir=remote_directory,
-        local_dir=local_directory,
-        force_download=True
+        remote_dir=remote_directory
     )
-    print(result)
+    # result.remove(remote_directory)
+    logger.debug(result)
     
     # ftp://avt@118.70.57.250:18921/data/RASTER_PREPR/output_ship_detect
     

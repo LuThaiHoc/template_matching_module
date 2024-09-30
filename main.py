@@ -10,7 +10,7 @@ from utils import logger
 import time, glob
 
 FTP_SERVER_OUTPUT_DIR = "/output/template_matching"
-MODULE_SERVE_TASK_TYPE = 7 # the type of task that module is going to serve
+MODULE_SERVE_TASK_TYPE = 25 # the type of task that module is going to serve
 # SHIP_DETECT_OUTPUT_DIR = "/data/RASTER_PREPR/output_ship_detect/"
 SHIP_DETECT_OUTPUT_DIR = "/data/DETECTOR_OUTPUT/"
 DOWNLAD_SHIP_DETECT_OUTPUT_DIR = "output_ship_detect/"
@@ -95,23 +95,31 @@ def create_json_from_paths(png_paths):
     """
     json_list = []
     
-    for png_path, main_file in png_paths:
+    for png_path, main_dir in png_paths:
         # Extract the file ID and create corresponding paths
         file_id = os.path.basename(png_path).split('.')[0]
         txt_path = png_path.replace('.png', '.txt')
+        coords = []
         
-        # Read coordinates from the corresponding .txt file
-        coords = read_coords_from_file(txt_path)
-        if coords is None:
-            continue
+        # handle if there are not
+        if not os.path.exists(txt_path):
+            txt_path = ''
+            coords = []
+        else:
+            # Read coordinates from the corresponding .txt file
+            coords = read_coords_from_file(txt_path)
+            if coords is None:
+                coords = []
+                
+        server_path = png_path.replace(DOWNLAD_SHIP_DETECT_OUTPUT_DIR, main_dir)
         
         # Create the JSON entry
         json_entry = {
             "id": file_id.zfill(3),
-            "path": png_path,
+            "path": server_path,
             "coords": coords,
             "lb_path": txt_path,
-            "at" : main_file
+            "at" : main_dir
         }
         
         json_list.append(json_entry)
@@ -209,7 +217,7 @@ if __name__ == "__main__":
         # get the waiting task
         task : AvtTask = db.get_first_waiting_task_by_type(MODULE_SERVE_TASK_TYPE)
         if task is None:
-            logger.debug("No waiting task, check again after 5s")
+            logger.debug(f"No waiting task with type {MODULE_SERVE_TASK_TYPE}, check again after 5s")
             time.sleep(CHECK_WAITING_TASK_INTERVAL)
             continue
         
@@ -256,7 +264,6 @@ if __name__ == "__main__":
             
         # template_image_file = task_param_dict.get("template_image_file", "")
         template_image_file = template_image_file_list[0]
-        main_image_files = task_param_dict.get("main_image_files", [])
         
         if template_image_file == "":
             logger.debug(f"Input params of task {task.id} is not valid - No template image file")
@@ -265,19 +272,9 @@ if __name__ == "__main__":
             db.update_task(id=task.id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
             continue
         
-        if len(main_image_files) == 0:
-            logger.debug(f"Input params of task {task.id} is not valid - No main image file")
-            stop_event.set()
-            running_time_thread.join()
-            db.update_task(id=task.id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
-            continue
-        
-        
-        logger.debug(f"Finding object by image: {template_image_file}")
-        output_ship_detect_of_main_image_files = [(f"{SHIP_DETECT_OUTPUT_DIR}/{os.path.splitext(os.path.basename(file))[0]}", file) for file in main_image_files]
-        results = []
-        
         ftp_config = FtpConfig().read_from_json(config_json_path)
+        
+        # download template image
         downloaded_template_image_file = ftp_download(ftp_server=ftp_config.host, ftp_port=ftp_config.port, username=ftp_config.user, password=ftp_config.password, file_path=template_image_file)
         logger.debug(f"Template image file downloaded at: {downloaded_template_image_file}")
         
@@ -287,26 +284,44 @@ if __name__ == "__main__":
             stop_event.set()
             running_time_thread.join()
             continue
+    
+        logger.debug(f"Finding object by image: {template_image_file}")
+        results = []
+
+        all_remote_dirs = []        
         
-        for output_ship_detect_dir, main_file in output_ship_detect_of_main_image_files:
-            logger.debug(f"Downloading all output ship detect in {output_ship_detect_dir}")
-            download_local_dir = os.path.join(DOWNLAD_SHIP_DETECT_OUTPUT_DIR,  os.path.basename(os.path.normpath(output_ship_detect_dir)))
+        logger.debug(f'Getting all server dir...')
+        for find_dir in ftp_config.find_dirs:
+            chid_dirs = ftp_get_all_child_dirs(
+                ftp_server=ftp_config.host,
+                ftp_port=ftp_config.port,
+                username=ftp_config.user,
+                password=ftp_config.password,
+                remote_dir=find_dir
+            )
+            chid_dirs.remove(find_dir) # dont find in parent dir, just find in sub-dir
+            all_remote_dirs += chid_dirs
+                
+        
+        
+        for searching_dir in all_remote_dirs:
+            logger.debug(f"Downloading all images file of/contain ship detect from {searching_dir}")
+            download_local_dir = os.path.join(DOWNLAD_SHIP_DETECT_OUTPUT_DIR,  os.path.basename(os.path.normpath(searching_dir)))
             
-            delete_all_files_in_dir(download_local_dir)
-            
+            # delete_all_files_in_dir(download_local_dir)
             downloaded_founded_image_and_labels = ftp_download_all_files(ftp_server=ftp_config.host,
                                                                             ftp_port=ftp_config.port,
                                                                             username=ftp_config.user,
                                                                             password=ftp_config.password,
-                                                                            remote_dir=output_ship_detect_dir,
+                                                                            remote_dir=searching_dir,
                                                                             local_dir=download_local_dir,
-                                                                            force_download=True
+                                                                            force_download=False # allow to using cached
                                                                         )
             if len(downloaded_founded_image_and_labels) == 0:
-                logger.warning(f"No ship detect in {output_ship_detect_dir}, maybe no ship found or the main image was not processed by ship detector model")          
+                logger.warning(f"No data {searching_dir}, maybe no ship found or the main image was not processed by ship detector model")          
             
             for item in downloaded_founded_image_and_labels:
-                if item.endswith(".png"):
+                if item.endswith(".png") or item.endswith(".jpg") or item.endswith(".jpeg"):
                     logger.debug(f"Checking ship: {item}")
                     result_image, crop, polygon = sift_flann_ransac_matching(item, downloaded_template_image_file)
                     if polygon is None: 
@@ -317,12 +332,12 @@ if __name__ == "__main__":
                         logger.debug(f"Found match: {item}")
                         # cv2.imshow("Got match", result_image)
                         # cv2.waitKey(0)
-                        results.append((item, main_file))
+                        results.append((item, searching_dir))
 
                 
         logger.debug(f"Got list matching ship: {results}")
         json_data = create_json_from_paths(results)
-        json_output_str = json.dumps(json_data).replace(DOWNLAD_SHIP_DETECT_OUTPUT_DIR, SHIP_DETECT_OUTPUT_DIR)
+        json_output_str = json.dumps(json_data) #.replace(DOWNLAD_SHIP_DETECT_OUTPUT_DIR, SHIP_DETECT_OUTPUT_DIR)
         json_output_str.replace("\\","/")
         
         logger.debug(f"Return result json: {json_output_str}")

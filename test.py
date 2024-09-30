@@ -76,58 +76,104 @@ def list_all_files(directory):
     return file_list
 
 
-SHIP_DETECT_OUTPUT_DIR = "/data/RASTER_PREPR/output_ship_detect/"
-DOWNLAD_SHIP_DETECT_OUTPUT_DIR = "output_ship_detect/quang_ninh_1m"
-# ftp_config = FtpConfig().read_from_json('config.json')
-# downloaded_founded_image_and_labels = ftp_download_all_files(ftp_server=ftp_config.host,
-#                                                                     ftp_port=ftp_config.port,
-#                                                                     username=ftp_config.user,
-#                                                                     password=ftp_config.password,
-#                                                                     remote_dir=SHIP_DETECT_OUTPUT_DIR,
-#                                                                     local_dir=DOWNLAD_SHIP_DETECT_OUTPUT_DIR,
-#                                                                     force_download=True
-#                                                                 )
+# SHIP_DETECT_OUTPUT_DIR = "/data/RASTER_PREPR/output_ship_detect/"
+# DOWNLAD_SHIP_DETECT_OUTPUT_DIR = "output_ship_detect/quang_ninh_1m"
+DOWNLAD_SHIP_DETECT_OUTPUT_DIR = "output_ship_detect/"
 
-downloaded_founded_image_and_labels = list_all_files(DOWNLAD_SHIP_DETECT_OUTPUT_DIR)
-# downloaded_template_image_file = '/tmp/data/TEMPLATE/07_resized.png'
-downloaded_template_image_file = '/media/hoc/WORK/remote/AnhPhuong/SAT/Project/SAT_Modules/data/template_matching/template/h7_camera.png'
+ftp_config = FtpConfig().read_from_json('config.json')
 
+all_dirs = []
+
+for find_dir in ftp_config.find_dirs:
+    chid_dirs = ftp_get_all_child_dirs(
+        ftp_server=ftp_config.host,
+        ftp_port=ftp_config.port,
+        username=ftp_config.user,
+        password=ftp_config.password,
+        remote_dir=find_dir
+    )
+    chid_dirs.remove(find_dir) # dont find in parent dir, just find in sub-dir
+    all_dirs += chid_dirs
+    
+
+i = 0
+
+downloaded_template_image_file = './template.png'
 
 results = []
-for item in downloaded_founded_image_and_labels:
-    if item.endswith(".png"):
-        # print("Checking ship: ", item)
-        result_image, crop, polygon = sift_flann_ransac_matching(item, downloaded_template_image_file)
-        if polygon is None: 
-            continue
+for searching_dir in all_dirs:
+    download_local_dir = os.path.join(DOWNLAD_SHIP_DETECT_OUTPUT_DIR,  os.path.basename(os.path.normpath(searching_dir)))
+    # print(download_local_dir, searching_dir)
+
+    downloaded_founded_image_and_labels = ftp_download_all_files(ftp_server=ftp_config.host,
+                                                                            ftp_port=ftp_config.port,
+                                                                            username=ftp_config.user,
+                                                                            password=ftp_config.password,
+                                                                            remote_dir=searching_dir,
+                                                                            local_dir=download_local_dir,
+                                                                            force_download=False
+                                                                        )
+    for item in downloaded_founded_image_and_labels:
+        if item.endswith(".png") or item.endswith(".jpg") or item.endswith(".jpeg"):
+            logger.debug(f"Checking ship: {item}")
+            result_image, crop, polygon = sift_flann_ransac_matching(item, downloaded_template_image_file)
+            if polygon is None: 
+                continue
+            
+            # if True:
+            if is_convex_polygon(polygon):
+                logger.debug(f"Found match: {item}")
+                # cv2.imshow("Got match", result_image)
+                # cv2.waitKey(0)
+                results.append((item, searching_dir))
+    
+    # print(downloaded_founded_image_and_labels)
+    # i += 1
+    # if i >= 2: 
+    #     break
+    
+logger.debug(f"Result: {results}")
+
+# downloaded_founded_image_and_labels = list_all_files(DOWNLAD_SHIP_DETECT_OUTPUT_DIR)
+# # downloaded_template_image_file = '/tmp/data/TEMPLATE/07_resized.png'
+# downloaded_template_image_file = '/media/hoc/WORK/remote/AnhPhuong/SAT/Project/SAT_Modules/data/template_matching/template/h7_camera.png'
+
+
+# results = []
+# for item in downloaded_founded_image_and_labels:
+#     if item.endswith(".png"):
+#         # print("Checking ship: ", item)
+#         result_image, crop, polygon = sift_flann_ransac_matching(item, downloaded_template_image_file)
+#         if polygon is None: 
+#             continue
         
-        print("Found: ", item)
-        cv2.imshow("Matching result", result_image)
-        cv2.waitKey(50)
-        if is_convex_polygon(polygon):
-            print("Polygon convex: ", item)
-            # cv2.imshow("Got match", result_image)
-            # cv2.waitKey(0)
-            results.append(item)
-        else:
-            print("Polygon not convex")
+#         print("Found: ", item)
+#         cv2.imshow("Matching result", result_image)
+#         cv2.waitKey(50)
+#         if is_convex_polygon(polygon):
+#             print("Polygon convex: ", item)
+#             # cv2.imshow("Got match", result_image)
+#             # cv2.waitKey(0)
+#             results.append(item)
+#         else:
+#             print("Polygon not convex")
 
 
-# # List of PNG paths
-# png_paths = [
-#     'output_ship_detect/tay_ho_1m/001.png',
-#     'output_ship_detect/tay_ho_1m/002.png'
-# ]
+# # # List of PNG paths
+# # png_paths = [
+# #     'output_ship_detect/tay_ho_1m/001.png',
+# #     'output_ship_detect/tay_ho_1m/002.png'
+# # ]
 
-print(results)
+# print(results)
 
-# Create JSON structure
-json_data = create_json_from_paths(results)
+# # Create JSON structure
+# json_data = create_json_from_paths(results)
 
-# Output JSON data
-# print(json.dumps(json_data).replace(DOWNLAD_SHIP_DETECT_OUTPUT_DIR, SHIP_DETECT_OUTPUT_DIR))
+# # Output JSON data
+# # print(json.dumps(json_data).replace(DOWNLAD_SHIP_DETECT_OUTPUT_DIR, SHIP_DETECT_OUTPUT_DIR))
 
-# for item in results:
-#     item.replace(DOWNLAD_SHIP_DETECT_OUTPUT_DIR, SHIP_DETECT_OUTPUT_DIR)
+# # for item in results:
+# #     item.replace(DOWNLAD_SHIP_DETECT_OUTPUT_DIR, SHIP_DETECT_OUTPUT_DIR)
 
 
