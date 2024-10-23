@@ -111,7 +111,10 @@ def create_json_from_paths(png_paths):
             if coords is None:
                 coords = []
                 
-        server_path = png_path.replace(DOWNLAD_SHIP_DETECT_OUTPUT_DIR, main_dir)
+        #/data/DETECTOR_OUTPUT/quang_ninh_1m_part_1 -- Png: output_ship_detect/quang_ninh_1m_part_1/006_0018.png
+        # logger.debug(f'Main: {main_dir} -- Png: {png_path}')
+        # server_path = png_path.replace(DOWNLAD_SHIP_DETECT_OUTPUT_DIR, main_dir)
+        server_path = main_dir + '/' +  os.path.basename(png_path)
         
         # Create the JSON entry
         json_entry = {
