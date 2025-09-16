@@ -8,6 +8,9 @@ import sys
 from exit_code import *
 from utils import logger
 import time, glob
+from datetime import datetime
+import pytz
+
 
 FTP_SERVER_OUTPUT_DIR = "/output/template_matching"
 MODULE_SERVE_TASK_TYPE = 25 # the type of task that module is going to serve
@@ -68,27 +71,63 @@ def save_and_upload_images(result_image, cropped_result, avt_task_id, ftp_config
     
     return uploaded_result_image_path, uploaded_result_croped_path
 
+def iso8601_to_timestamp(iso_time):
+    """
+    Convert an ISO 8601 formatted timestamp to a Unix timestamp in seconds.
+
+    :param iso_time: String in ISO 8601 format (e.g., '2025-09-16T03:45:00.000000Z').
+    :return: Unix timestamp in seconds (integer) or None if conversion fails.
+    """
+    try:
+        # Parse the ISO 8601 string to a datetime object
+        dt = datetime.fromisoformat(iso_time.replace('Z', '+00:00'))
+        # Ensure the datetime is timezone-aware
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=pytz.UTC)
+        # Convert to Unix timestamp in seconds
+        timestamp = int(dt.timestamp())
+        return timestamp
+    except (ValueError, TypeError):
+        logger.error(f"Error converting ISO 8601 time to timestamp: {iso_time}")
+        return None
+
 def read_coords_from_file(txt_path):
     """
-    Read coordinates from a text file.
+    Read coordinates and timestamp from a text file, assuming first 6 values are coordinates
+    and the 7th value is the timestamp.
 
     :param txt_path: Path to the .txt file.
-    :return: List of coordinates read from the file.
+    :return: Tuple of (list of coordinates, formatted timestamp) or (None, None) on error.
     """
     try:
         with open(txt_path, 'r') as file:
-            coords = [float(value) for value in file.read().strip().split()]
-        return coords
+            values = file.read().strip().split()
+            # Ensure there are values to process
+            if not values:
+                return None, None
+            
+            # Extract first 6 values as coordinates, or fewer if not enough values
+            coords = [float(value) for value in values[:6]]
+            # Extract timestamp (7th value) if it exists
+            timestamp = None
+            if len(values) >= 7:
+                timestamp_int = int(values[6])
+                timestamp = datetime.fromtimestamp(timestamp_int, tz=pytz.UTC).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+            else:
+                # Use current time if timestamp is missing
+                timestamp = datetime.now(pytz.UTC).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+            
+            return coords, timestamp
     except FileNotFoundError:
         logger.error(f"File not found: {txt_path}")
-        return None
-    except ValueError:
-        logger.error(f"Error reading coordinates from file: {txt_path}")
-        return None
+        return None, None
+    except (ValueError, IndexError):
+        logger.error(f"Error reading coordinates or timestamp from file: {txt_path}")
+        return None, None
 
 def create_json_from_paths(png_paths):
     """
-    Create a JSON structure from a list of PNG paths.
+    Create a JSON structure from a list of PNG paths, including timestamp from txt file.
 
     :param png_paths: List of PNG paths.
     :return: JSON structure as a list of dictionaries.
@@ -100,21 +139,21 @@ def create_json_from_paths(png_paths):
         file_id = os.path.basename(png_path).split('.')[0]
         txt_path = png_path.replace('.png', '.txt')
         coords = []
+        timestamp = datetime.now(pytz.UTC).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
         
-        # handle if there are not
+        # Handle if txt file does not exist
         if not os.path.exists(txt_path):
             txt_path = ''
             coords = []
         else:
-            # Read coordinates from the corresponding .txt file
-            coords = read_coords_from_file(txt_path)
+            # Read coordinates and timestamp from the corresponding .txt file
+            coords, file_timestamp = read_coords_from_file(txt_path)
             if coords is None:
                 coords = []
-                
-        #/data/DETECTOR_OUTPUT/quang_ninh_1m_part_1 -- Png: output_ship_detect/quang_ninh_1m_part_1/006_0018.png
-        # logger.debug(f'Main: {main_dir} -- Png: {png_path}')
-        # server_path = png_path.replace(DOWNLAD_SHIP_DETECT_OUTPUT_DIR, main_dir)
-        server_path = main_dir + '/' +  os.path.basename(png_path)
+            if file_timestamp is not None:
+                timestamp = file_timestamp
+        
+        server_path = main_dir + '/' + os.path.basename(png_path)
         
         # Create the JSON entry
         json_entry = {
@@ -122,7 +161,8 @@ def create_json_from_paths(png_paths):
             "path": server_path,
             "coords": coords,
             "lb_path": txt_path,
-            "at" : main_dir
+            "at": main_dir,
+            "time": timestamp
         }
         
         json_list.append(json_entry)
@@ -249,10 +289,11 @@ if __name__ == "__main__":
             logger.debug(f"Input params of task {task.id} is not valid - No data")
             stop_event.set()
             running_time_thread.join()
-            db.update_task(id=task.id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
+            db.update_task(task_id=task.id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
             continue
 
         task_param_dict = json.loads(task.task_param)
+        logger.debug(f"Task param dict: {task_param_dict}")
         
 
         # Access the data as a dictionary
@@ -262,31 +303,32 @@ if __name__ == "__main__":
             logger.debug(f"Input params of task {task.id} is not valid - No main template file")
             stop_event.set()
             running_time_thread.join()
-            db.update_task(id=task.id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
+            db.update_task(task_id=task.id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
             continue
             
         # template_image_file = task_param_dict.get("template_image_file", "")
         template_image_file = template_image_file_list[0]
         
-        if template_image_file == "":
+        if template_image_file == "" or template_image_file is None:
             logger.debug(f"Input params of task {task.id} is not valid - No template image file")
             stop_event.set()
             running_time_thread.join()
-            db.update_task(id=task.id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
+            db.update_task(task_id=task.id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
             continue
         
         ftp_config = FtpConfig().read_from_json(config_json_path)
         
         # download template image
-        downloaded_template_image_file = ftp_download(ftp_server=ftp_config.host, ftp_port=ftp_config.port, username=ftp_config.user, password=ftp_config.password, file_path=template_image_file)
-        logger.debug(f"Template image file downloaded at: {downloaded_template_image_file}")
-        
-        if downloaded_template_image_file is None:
-            logger.error("Cannot download file from ftp server!")
-            db.update_task(task_id=task.id, task_stat=0, task_message=exit_code_messages[EXIT_FTP_DOWNLOAD_ERROR])
+        logger.debug(f"Downloading template image file: {template_image_file}")
+        if template_image_file is None:
+            logger.error("Template image file param is None!")
+            db.update_task(task_id=task.id, task_stat=0, task_message=exit_code_messages[EXIT_INVALID_MODULE_PARAMETERS])
             stop_event.set()
             running_time_thread.join()
             continue
+
+        downloaded_template_image_file = ftp_download(ftp_server=ftp_config.host, ftp_port=ftp_config.port, username=ftp_config.user, password=ftp_config.password, file_path=template_image_file)
+        logger.debug(f"Template image file downloaded at: {downloaded_template_image_file}")
     
         logger.debug(f"Finding object by image: {template_image_file}")
         results = []

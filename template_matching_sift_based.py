@@ -112,12 +112,13 @@ if __name__ == "__main__":
     # main_image_path = 'imgs\map.tif'
     # template_image_path = 'imgs\\04.png'
     import glob
-    files = glob.glob('output_ship_detect/*.png')
+    files = glob.glob('img_test/*.png')
     for file in files:
         print(file)
         if file.endswith('.png'):
             main_image_path = file
-            template_image_path = 'imgs/148.png'
+            # template_image_path = 'imgs/148.png'
+            template_image_path = 'img_test/006_0004.png'
 
             import time
             t = time.time()

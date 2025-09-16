@@ -10,3 +10,5 @@ imgs/
 *.json
 output_ship_detect/
 *.log
+img_test
+test

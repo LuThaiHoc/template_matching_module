@@ -79,6 +79,9 @@ def ftp_download(ftp_server, ftp_port, username, password, file_path, force_down
         ftp.login(user=username, passwd=password)
 
         # Get the file name from the file path
+        if file_path is None:
+            logger.error(f"file path is None")
+            return None
         filename = file_path.split('/')[-1]
         md5_file_path = file_path + ".md5"
 
@@ -105,6 +108,7 @@ def ftp_download(ftp_server, ftp_port, username, password, file_path, force_down
             # Download the .md5 file
             with open(local_md5_path, 'wb') as local_md5_file:
                 ftp.retrbinary(f'RETR {md5_file_path}', local_md5_file.write)
+                logger.debug(f"Downloaded MD5 file to {local_md5_path}, size: {os.path.getsize(local_md5_path)} bytes")
             
             # Check if the MD5 file is empty
             if os.path.getsize(local_md5_path) == 0:
@@ -113,7 +117,13 @@ def ftp_download(ftp_server, ftp_port, username, password, file_path, force_down
             else:
                 # Read the checksum from the .md5 file
                 with open(local_md5_path, 'r') as local_md5_file:
-                    server_md5_checksum = local_md5_file.read().split()[0]
+                    content = local_md5_file.read().strip()
+                    logger.debug(f"MD5 file content: {content}")
+                    if not content:
+                        logger.debug(f"MD5 file '{md5_file_path}' is empty or invalid. Forcing download.")
+                        force_download = True
+                    else:
+                        server_md5_checksum = content.split()[0]
 
                 # Check if the local file exists and compare checksums
                 if os.path.exists(local_path):
@@ -155,7 +165,7 @@ def ftp_download(ftp_server, ftp_port, username, password, file_path, force_down
         return local_path
 
     except Exception as e:
-        logger.debug(f"An error occurred: {e}")
+        logger.debug(f"An error occurred when download file: {e}")
         return None
 
     finally:
@@ -211,7 +221,7 @@ def ftp_upload(ftp_server, ftp_port, username, password, local_file_path, remote
         return os.path.join(remote_directory, filename)
 
     except Exception as e:
-        logger.debug(f"An error occurred: {e}")
+        logger.debug(f"An error occurred when upload file: {e}")
         return None
 
     finally:
@@ -254,6 +264,9 @@ def get_server_checksum(ftp_server, ftp_port, username, password, file_path):
 
         # Get the checksum
         response = ftp.sendcmd(f"{checksum_command} {file_path}")
+        if response is None:
+            logger.debug(f"Failed to retrieve checksum for '{file_path}': No response from server.")
+            return None
         checksum = response.split()[-1]
         
         logger.debug(f"{checksum_command} checksum of '{file_path}' is {checksum}")
@@ -261,7 +274,7 @@ def get_server_checksum(ftp_server, ftp_port, username, password, file_path):
         return checksum
 
     except Exception as e:
-        logger.debug(f"An error occurred: {e}")
+        logger.debug(f"An error occurred when get server checksum: {e}")
         return None
 
     finally:
@@ -360,7 +373,7 @@ def ftp_download_all_files_to_one_dir(ftp_server, ftp_port, username, password, 
                     raise
 
     except Exception as e:
-        logger.debug(f"An error occurred: {e}")
+        logger.debug(f"An error occurred when download all file to dir: {e}")
 
     finally:
         # Close the FTP connection
@@ -470,7 +483,7 @@ def ftp_download_all_files(ftp_server, ftp_port, username, password, remote_dir,
         process_directory(ftp, remote_dir, local_dir)
 
     except Exception as e:
-        logger.debug(f"An error occurred: {e}")
+        logger.debug(f"An error occurred when ftp download all file: {e}")
 
     finally:
         # Close the FTP connection
@@ -514,7 +527,7 @@ def ftp_get_all_child_dirs(ftp_server, ftp_port, username, password, remote_dir)
                         # If it fails to change directory, it's a file, so ignore it
                         continue
             except Exception as e:
-                logger.debug(f"An error occurred: {e}")
+                logger.debug(f"An error occurred when fpt get all chill dirs: {e}")
                 return
 
         # Start recursion from the remote directory
