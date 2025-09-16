@@ -162,7 +162,7 @@ def create_json_from_paths(png_paths):
             "coords": coords,
             "lb_path": txt_path,
             "at": main_dir,
-            "time": timestamp
+            "detect_time": timestamp
         }
         
         json_list.append(json_entry)
